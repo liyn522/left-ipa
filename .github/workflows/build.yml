@@ -3,6 +3,9 @@ name: build-ipa
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-latest
@@ -60,11 +63,18 @@ jobs:
           zip -qry ../Left_Superlike_unsigned.ipa Payload
           cd ..
           ls -l Left_Superlike_unsigned.ipa
-          echo "版本号:"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" out/Payload/Left_Superlike.app/Info.plist
 
       - uses: actions/upload-artifact@v4
         with:
           name: Left_Superlike_v1.01_unsigned
           path: src/Left_Superlike_unsigned.ipa
           if-no-files-found: error
+
+      - name: 把 ipa 提交回仓库，方便直接下载
+        run: |
+          cp src/Left_Superlike_unsigned.ipa ./Left_Superlike_v1.01_unsigned.ipa
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add Left_Superlike_v1.01_unsigned.ipa
+          git commit -m "build: unsigned ipa v1.01" || echo "no change"
+          git push
