@@ -1,0 +1,70 @@
+name: build-ipa
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 找到并解压源码包
+        run: |
+          ZIP=$(ls *.zip 2>/dev/null | head -1)
+          if [ -z "$ZIP" ]; then echo "::error::仓库根目录没有 zip，请把源码包上传上来"; exit 1; fi
+          echo "找到源码包: $ZIP"
+          mkdir -p src
+          unzip -q "$ZIP" -d src
+          echo "--- 解压后内容 ---"
+          ls -la src | head -30
+
+      - name: 安装 xcodegen
+        run: brew install xcodegen
+
+      - name: 生成 App 图标
+        run: |
+          cd src
+          mkdir -p Left_Superlike/Assets.xcassets/AppIcon.appiconset
+          sips -s format png assets/icon_src.png --out Left_Superlike/Assets.xcassets/AppIcon.appiconset/icon-1024.png
+          sips -z 1024 1024 Left_Superlike/Assets.xcassets/AppIcon.appiconset/icon-1024.png >/dev/null
+
+      - name: 生成 Xcode 工程
+        run: |
+          cd src
+          xcodegen generate
+
+      - name: 编译（不签名）
+        run: |
+          cd src
+          xcodebuild \
+            -project Left_Superlike.xcodeproj \
+            -scheme Left_Superlike \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            ONLY_ACTIVE_ARCH=NO \
+            build
+
+      - name: 打包成 ipa
+        run: |
+          cd src
+          mkdir -p out/Payload
+          cp -R build/Build/Products/Release-iphoneos/Left_Superlike.app out/Payload/
+          cd out
+          zip -qry ../Left_Superlike_unsigned.ipa Payload
+          cd ..
+          ls -l Left_Superlike_unsigned.ipa
+          echo "版本号:"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" out/Payload/Left_Superlike.app/Info.plist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Left_Superlike_v1.01_unsigned
+          path: src/Left_Superlike_unsigned.ipa
+          if-no-files-found: error
